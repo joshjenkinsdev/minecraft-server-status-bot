@@ -1,7 +1,7 @@
 import os
 import discord
 from discord.ext import tasks
-import socket
+from mcstatus import JavaServer
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,25 +13,27 @@ MC_PORT = int(os.getenv("MC_PORT"))
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 
-def is_server_up(host, port, timeout=3):
+def get_server_status(host, port):
     try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except OSError:
-        return False
+        server = JavaServer.lookup(f"{host}:{port}")
+        status = server.status()
+        return True, status.players.online, status.players.max
+    except Exception:
+        return False, 0, 0
 
 @tasks.loop(seconds=45)
 async def check_server():
-    up = is_server_up(MC_HOST, MC_PORT)
+    up, online, max_players = get_server_status(MC_HOST, MC_PORT)
     if up:
+        text = f"{online}/{max_players} online"
         await client.change_presence(
             status=discord.Status.online,
-            activity=discord.Game(name="Server: Online")
+            activity=discord.Activity(type=discord.ActivityType.watching, name=text)
         )
     else:
         await client.change_presence(
             status=discord.Status.dnd,
-            activity=discord.Game(name="Server: Offline")
+            activity=discord.Activity(type=discord.ActivityType.watching, name="Server Offline")
         )
 
 @client.event
